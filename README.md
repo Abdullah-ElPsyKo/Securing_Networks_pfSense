@@ -34,7 +34,7 @@ The primary objective was to build a resilient, production-ready Small-to-Medium
 * **LAN Layout:** Enforces explicit segregation parameters for internal corporate infrastructure assets.
 * **DMZ Layout:** Enforces strict containment controls around untrusted, public-facing services.
 
-| Interface Management | Scope Definitions |
+| LAN Interface Config | DMZ Interface Config |
 |---|---|
 | ![Interface Config 1](./images/image-1.png) | ![Interface Config 2](./images/image-2.png) |
 
@@ -111,3 +111,6 @@ Alert: GPL ATTACK_RESPONSE id check returned root -> [Automated DROP Logged]
 | **DMZ** | LAN | Any | **DENY** | ❌ Blocked (As Expected) |
 | **WAN** | DMZ | HTTP/HTTPS (Port-Forwarded) | **ALLOW** | ✅ Pass |
 
+---
+
+![Dashboard](./images/image-10.png)
