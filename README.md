@@ -4,7 +4,7 @@
 
 This project demonstrates the design and deployment of a segmented network using **pfSense** as the firewall and routing platform.
 
-The environment was built in **VMware Workstation** and consists of separate **WAN**, **LAN**, and **DMZ** networks. Since VMware Workstation does not support VLAN tagging in this setup, each network was isolated using its own virtual network adapter.
+The environment was built in **VMware Workstation** and consists of separate **WAN**, **LAN**, and **DMZ** networks. Each security zone was isolated using a dedicated virtual network adapter rather than VLANs.
 
 The lab focuses on:
 
@@ -20,12 +20,25 @@ The lab focuses on:
 
 | Component | Purpose |
 |-----------|---------|
-| **Hypervisor** | VMware Workstation |
-| **Firewall** | pfSense Community Edition |
-| **LAN Client** | Debian |
-| **DMZ Host** | Kali Linux |
+| VMware Workstation | Virtualization platform |
+| pfSense Community Edition | Firewall and router |
+| Debian Client | Internal workstation |
+| Linux Test Host | DMZ validation and firewall testing |
 
 ## Network Layout
+
+                 Internet
+                     │
+                 DHCP / WAN
+                     │
+              +--------------+
+              |   pfSense    |
+              +--------------+
+                 │        │
+        192.168.218.0 192.168.40.0
+             LAN            DMZ
+              │              │
+      Debian Client    Linux Test Host
 
 | Interface | Address | Purpose |
 |----------|----------|---------|
@@ -68,12 +81,12 @@ The firewall is configured using a default-deny approach between security zones.
 
 - Allow outbound Internet access
 - Allow required DNS/DHCP traffic
-- Block direct access to the DMZ
-
+- Block connections initiated from the LAN to the DMZ
+  
 ## DMZ
 
 - Allow HTTP/HTTPS traffic through port forwarding
-- Block connections to the LAN
+- Block connections initiated from the DMZ to the LAN
 - Allow limited outbound traffic for DNS and updates
 
 | LAN Rules | DMZ Rules |
@@ -84,7 +97,7 @@ The firewall is configured using a default-deny approach between security zones.
 
 # GeoIP Filtering (pfBlockerNG)
 
-pfBlockerNG was configured to block traffic from selected geographic regions before it reached internal services.
+pfBlockerNG was configured to block traffic from selected countries using GeoIP-based firewall rules.
 
 Configuration steps:
 
@@ -115,8 +128,7 @@ Traffic to `yandex.ru` was tested before and after enabling the GeoIP rules.
 
 Suricata was deployed in **Inline IPS mode** on the **LAN** and **DMZ** interfaces.
 
-Running the IPS behind the firewall allows it to inspect legitimate traffic instead of wasting resources processing unsolicited Internet scans that the firewall already blocks.
-
+Running the IPS behind the firewall allows it to inspect filtered traffic instead of processing unsolicited Internet scans that pfSense already blocks.
 Configuration highlights:
 
 - Inline IPS mode
@@ -154,7 +166,7 @@ confirming that the traffic was detected and blocked.
 
 ---
 
-# Dashboard
+# # pfSense Dashboard
 
 ![Dashboard](./images/image-10.png)
 
