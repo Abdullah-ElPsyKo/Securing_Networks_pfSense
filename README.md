@@ -1,116 +1,175 @@
 # Securing Networks with pfSense: WAN, LAN, and DMZ Segmentation
 
-## Architecture & Project Overview
-This project focuses on the design and deployment of a segmented, secure network topology using **pfSense** as the core edge firewall and routing platform. The entire architecture was virtualized within **VMware Workstation**. Due to hypervisor limitations regarding native VLAN tagging, hard physical interface isolation was achieved by provisioning **three separate virtual NICs** mapped to dedicated host-only networks.
+## Overview
 
-The primary objective was to build a resilient, production-ready Small-to-Medium Business (SMB) network layout featuring strict zone separation, automated perimeter GeoIP filtering, and deep packet inspection (DPI) via Suricata running in inline IPS mode.
+This project demonstrates the design and deployment of a segmented network using **pfSense** as the firewall and routing platform.
+
+The environment was built in **VMware Workstation** and consists of separate **WAN**, **LAN**, and **DMZ** networks. Since VMware Workstation does not support VLAN tagging in this setup, each network was isolated using its own virtual network adapter.
+
+The lab focuses on:
+
+- Network segmentation
+- Stateful firewall policies
+- DMZ isolation
+- GeoIP filtering with pfBlockerNG
+- Intrusion prevention with Suricata (IPS)
 
 ---
 
-## Lab Setup & Interface Topology
+# Lab Architecture
 
-* **Hypervisor Layer:** VMware Workstation
-* **Firewall Appliance:** pfSense Community Edition
-* **Target Test Endpoints:** 
-  * LAN Client: Debian Endpoint
-  * DMZ Server: Kali Testing Machine
+| Component | Purpose |
+|-----------|---------|
+| **Hypervisor** | VMware Workstation |
+| **Firewall** | pfSense Community Edition |
+| **LAN Client** | Debian |
+| **DMZ Host** | Kali Linux |
 
-### Subnet Allocations & vNIC Mapping
-* **WAN (NIC 1):** Configured via upstream physical DHCP bridging for direct internet access.
-* **LAN (NIC 2):** Static IP `192.168.218.1/24` — Dedicated internal trusted segment with an active DHCP scope (`.100` to `.200`).
-* **DMZ (NIC 3):** Static IP `192.168.40.1/24` — Isolated DMZ staging layer for public-facing utilities with an active DHCP scope (`.100` to `.200`).
+## Network Layout
+
+| Interface | Address | Purpose |
+|----------|----------|---------|
+| **WAN** | DHCP | Internet connectivity |
+| **LAN** | `192.168.218.1/24` | Internal trusted network |
+| **DMZ** | `192.168.40.1/24` | Public-facing services |
 
 ![Network Topology](./images/image.png)
 
 ---
 
-## Interface & Routing Configurations
+# Interface Configuration
 
-### WAN Boundary
-* Upstream physical bridging with dynamic interface addressing.
-* Automated assignment of the default system gateway.
+## WAN
 
-### Internal Segments
-* **LAN Layout:** Enforces explicit segregation parameters for internal corporate infrastructure assets.
-* **DMZ Layout:** Enforces strict containment controls around untrusted, public-facing services.
+- DHCP from upstream network
+- Default gateway assigned automatically
 
-| LAN Interface Config | DMZ Interface Config |
+## LAN
+
+- Trusted internal network
+- DHCP range: `.100 - .200`
+
+## DMZ
+
+- Isolated subnet
+- DHCP range: `.100 - .200`
+
+| LAN Interface | DMZ Interface |
 |---|---|
-| ![Interface Config 1](./images/image-1.png) | ![Interface Config 2](./images/image-2.png) |
+| ![LAN](./images/image-1.png) | ![DMZ](./images/image-2.png) |
 
 ---
 
-## Firewall Policy Design
+# Firewall Policies
 
-Strict stateful packet filtering policies were implemented to enforce proper zone containment and prevent unauthorized lateral movement across the network stack.
+The firewall is configured using a default-deny approach between security zones.
 
-### LAN Policy Set
-* Permitted full outbound state tracking to the WAN interface for general internet access.
-* Enforced an absolute **Implicit Deny** rule blocking all ingress and traversal attempts toward the DMZ block.
-* Whitelisted internal infrastructure access for necessary DNS/DHCP local routing.
+## LAN
 
-### DMZ Policy Set
-* Permitted structured inbound traffic (HTTP/HTTPS tracking) originating from the WAN edge via explicit port forwarding.
-* Enforced a hard isolation boundary blocking **all** connection states initiating from the DMZ toward the internal LAN.
-* Provisioned restricted outbound paths exclusively for external DNS resolution.
+- Allow outbound Internet access
+- Allow required DNS/DHCP traffic
+- Block direct access to the DMZ
 
-| LAN Rule Infrastructure | DMZ Isolation Layers |
+## DMZ
+
+- Allow HTTP/HTTPS traffic through port forwarding
+- Block connections to the LAN
+- Allow limited outbound traffic for DNS and updates
+
+| LAN Rules | DMZ Rules |
 |---|---|
 | ![LAN Rules](./images/image-3.png) | ![DMZ Rules](./images/image-4.png) |
 
 ---
 
-## Perimeter Engineering: Edge GeoIP Filtering
+# GeoIP Filtering (pfBlockerNG)
 
-To drastically reduce the public exposure vector of the DMZ infrastructure against automated brute-force scripts and foreign reconnaissance scanners, **pfBlockerNG** was integrated into the firewall edge layer.
+pfBlockerNG was configured to block traffic from selected geographic regions before it reached internal services.
 
-### Rule Execution Pipeline
-1. Provisioned the pfBlockerNG package and activated the GeoIP tracking modules.
-2. Built custom network aliases targeted at high-risk regional IP pools.
-3. Enforced explicit drop policies on all inbound and outbound traffic strings communicating with restricted domains (e.g., automated dropping of connection requests targeting network spans in the Russian Federation).
+Configuration steps:
 
-| GeoIP Alias Mapping | Country Code Targeting |
+1. Install pfBlockerNG
+2. Enable GeoIP databases
+3. Create GeoIP aliases
+4. Apply firewall rules using the aliases
+
+| GeoIP Configuration | Country Selection |
 |---|---|
-| ![pfBlockerNG Setup 1](./images/image-6.png) | ![pfBlockerNG Setup 2](./images/image-5.png) |
+| ![GeoIP](./images/image-6.png) | ![Countries](./images/image-5.png) |
 
-### Boundary Verification Testing
-Policy enforcement was validated by verifying DNS and routing handshakes before and after activating the GeoIP drop rules against a top-level domain host (`yandex.ru`).
+## Validation
 
-* **Pre-Enforcement (Connection Allowed):**
-![Before Filter](./images/image-7.png)
+Traffic to `yandex.ru` was tested before and after enabling the GeoIP rules.
 
-* **Post-Enforcement (Traffic Dropped at Perimeter):**
-![After Filter](./images/image-8.png)
+### Before
 
----
+![Before](./images/image-7.png)
 
-## Deep Packet Inspection: Inline IPS Engine via Suricata
+### After
 
-Rather than placing the IDS/IPS engine directly on the WAN interface—which induces heavy CPU thrashing by processing thousands of junk automated external scans that pfSense already drops by default—**Suricata was deployed exclusively on the LAN and DMZ interfaces**. This architectural layout ensures the engine inspects actual, post-filtered corporate traffic.
-
-### Engineering Highlights
-* **Operational Mode:** **Inline IPS Execution** utilizing native **Netmap Kernel Acceleration (Workers Mode)** to provide true runtime packet dropping capabilities rather than passive, out-of-band alerts.
-* **Rule Engine Optimization:** Evaluated connections using the **Emerging Threats (ET) Open Ruleset**, with optimized rule flags to drop active threat signatures including Nmap scanning behavior, malformed data streams, and suspicious shellcode patterns.
-
-### Threat Detection Validation
-Executing an aggressive inbound web payload string containing an unauthenticated root command query (`curl -d 'uid=0(root)'`) immediately triggered a kernel socket layer trap:
-
-Alert: GPL ATTACK_RESPONSE id check returned root -> [Automated DROP Logged]
-
-
+![After](./images/image-8.png)
 
 ---
 
-## Verification & Isolation Matrix
+# Intrusion Prevention (Suricata)
 
-| Source Zone | Destination Zone | Protocol / Service | Expected Action | Result |
-| --- | --- | --- | --- | --- |
-| **LAN** | WAN | Any | **ALLOW** | ✅ Pass |
-| **LAN** | DMZ | Any | **DENY** | ❌ Blocked (As Expected) |
-| **DMZ** | WAN | Any | **ALLOW** | ✅ Pass |
-| **DMZ** | LAN | Any | **DENY** | ❌ Blocked (As Expected) |
-| **WAN** | DMZ | HTTP/HTTPS (Port-Forwarded) | **ALLOW** | ✅ Pass |
+Suricata was deployed in **Inline IPS mode** on the **LAN** and **DMZ** interfaces.
+
+Running the IPS behind the firewall allows it to inspect legitimate traffic instead of wasting resources processing unsolicited Internet scans that the firewall already blocks.
+
+Configuration highlights:
+
+- Inline IPS mode
+- Netmap acceleration
+- Emerging Threats Open ruleset
+- Automatic packet blocking
+
+## Validation
+
+Sending a test payload containing:
+
+```
+curl -d 'uid=0(root)'
+```
+
+triggered the following Suricata alert:
+
+```
+GPL ATTACK_RESPONSE id check returned root
+```
+
+confirming that the traffic was detected and blocked.
 
 ---
+
+# Verification
+
+| Source | Destination | Expected Result |
+|---------|-------------|-----------------|
+| LAN | WAN | ✅ Allowed |
+| LAN | DMZ | ❌ Blocked |
+| DMZ | WAN | ✅ Allowed |
+| DMZ | LAN | ❌ Blocked |
+| WAN | DMZ (HTTP/HTTPS) | ✅ Allowed |
+
+---
+
+# Dashboard
 
 ![Dashboard](./images/image-10.png)
+
+---
+
+# What I Learned
+
+Building this lab improved my understanding of:
+
+- Network segmentation
+- pfSense firewall configuration
+- Stateful firewall design
+- DMZ architecture
+- pfBlockerNG
+- GeoIP filtering
+- Suricata IPS
+- Network policy validation
+- Virtual network design in VMware
